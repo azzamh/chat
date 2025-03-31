@@ -1,0 +1,228 @@
+# version: "3.9"
+services:
+  postgres-user:
+    image: postgres:15
+    container_name: postgres-user
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_PORT=${POSTGRES_PORT_USER}
+    ports:
+      - "${POSTGRES_PORT_USER}:5432"
+    networks:
+      - chat-network
+  postgres-chat:
+    image: postgres:15
+    container_name: postgres-chat
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_PORT=${POSTGRES_PORT_CHAT}
+    ports:
+      - "${POSTGRES_PORT_CHAT}:5432"
+    networks:
+      - chat-network
+  postgres-presence:
+    image: postgres:15
+    container_name: postgres-presence
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_PORT=${POSTGRES_PORT_PRESENCE}
+    ports:
+      - "${POSTGRES_PORT_PRESENCE}:5432"
+    networks:
+      - chat-network
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    networks:
+      - chat-network
+
+  haproxy:
+    image: haproxy:2.8
+    container_name: haproxy
+    ports:
+      - "8888:8888"
+      - "8404:8404"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+    networks:
+      - chat-network
+    environment:
+      - TZ=Asia/Jakarta
+    dns:
+      - 127.0.0.11
+    dns_search:
+      - chat-network
+
+  chat-service:
+    build:
+      context: ./chat-service
+      target: development
+    container_name: chat-service
+    environment:
+      - PORT=${CHAT_SERVICE_PORT}
+      - DB_HOST=${POSTGRES_HOST_CHAT}
+      - DB_PORT=${POSTGRES_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - NODE_ID=1
+    depends_on:
+      - postgres-chat
+      - redis
+    ports:
+      - "${CHAT_SERVICE_PORT}:${CHAT_SERVICE_PORT}"
+    volumes:
+      - ./chat-service:/app
+      - /app/node_modules
+    networks:
+      - chat-network
+    command: npx nodemon src/server.ts
+
+  presence-service:
+    build:
+      context: ./presence-service
+      target: development
+    container_name: presence-service
+    environment:
+      - PORT=${PRESENCE_SERVICE_PORT}
+      - DB_HOST=${POSTGRES_HOST_PRESENCE}
+      - DB_PORT=${POSTGRES_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      - postgres-presence
+      - redis
+    ports:
+      - "${PRESENCE_SERVICE_PORT}:${PRESENCE_SERVICE_PORT}"
+    volumes:
+      - ./presence-service:/app
+      - /app/node_modules
+    networks:
+      - chat-network
+    command: npx nodemon src/server.ts
+  realtime-service-1:
+    build:
+      context: ./realtime-service
+      target: development
+    container_name: realtime-service-1
+    environment:
+      - PORT=${REALTIME_SERVICE_PORT1}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - USER_SERVICE_URL=${USER_SERVICE_URL}
+      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+      - PRESENCE_SERVICE_URL=${PRESENCE_SERVICE_URL}
+    depends_on:
+      - redis
+    ports:
+      - "${REALTIME_SERVICE_PORT1}:${REALTIME_SERVICE_PORT1}"
+    volumes:
+      - ./realtime-service:/app
+      - /app/node_modules
+    networks:
+      - chat-network
+    command: npx nodemon src/server.ts
+
+  realtime-service-2:
+    build:
+      context: ./realtime-service
+      target: development
+    container_name: realtime-service-2
+    environment:
+      - PORT=${REALTIME_SERVICE_PORT2}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - USER_SERVICE_URL=${USER_SERVICE_URL}
+      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+      - PRESENCE_SERVICE_URL=${PRESENCE_SERVICE_URL}
+    depends_on:
+      - redis
+    ports:
+      - "${REALTIME_SERVICE_PORT2}:${REALTIME_SERVICE_PORT2}"
+    volumes:
+      - ./realtime-service:/app
+      - /app/node_modules
+    networks:
+      - chat-network
+    command: npx nodemon src/server.ts
+
+  user-service:
+    build:
+      context: ./user-service
+      target: development
+    container_name: user-service
+    environment:
+      - PORT=${USER_SERVICE_PORT}
+      - DB_HOST=${POSTGRES_HOST_USER}
+      - DB_PORT=${POSTGRES_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+      - PRESENCE_SERVICE_URL=${PRESENCE_SERVICE_URL}
+    depends_on:
+      - postgres-user
+      - redis
+    ports:
+      - "${USER_SERVICE_PORT}:${USER_SERVICE_PORT}"
+    volumes:
+      - ./user-service:/app
+      - /app/node_modules
+    networks:
+      - chat-network
+    command: npx nodemon src/server.ts
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - chat-network
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - chat-network
+      
+networks:
+  chat-network:
+    driver: bridge

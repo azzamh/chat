@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  chat-fe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chat-fe
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - .env:/app/.env
+    environment:
+      - NODE_ENV=production
+      - SERVER_HOST=${SERVER_HOST:-http://localhost}
+      - SERVER_PORT=${SERVER_PORT:-3001}
+    networks:
+      - chat-network
+
+networks:
+  chat-network:
+    driver: bridge
